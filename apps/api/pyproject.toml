@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "smartmailbox-api"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.95.0"
+uvicorn = "^0.21.1"
+sqlalchemy = "^2.0.7"
+alembic = "^1.10.2"
+psycopg2-binary = "^2.9.5"
+pydantic-settings = "^2.0.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.6"
+httpx = "^0.24.1"
+python-json-logger = "^2.0.7"
+google-auth = "^2.17.3"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.0.261"
+pre-commit = "^3.2.2"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.isort]
+known-first-party = ["app"]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

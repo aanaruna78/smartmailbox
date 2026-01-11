@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "smartmailbox-workers"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+celery = "^5.2.7"
+redis = "^4.5.4"
+sqlalchemy = "^2.0.7"
+psycopg2-binary = "^2.9.5"
+pydantic-settings = "^2.0.0"
+python-json-logger = "^2.0.7"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.0.261"
+pre-commit = "^3.2.2"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.isort]
+known-first-party = ["worker"]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
