@@ -1,249 +1,299 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
-    Box,
-    Typography,
-    Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    TextField,
-    Chip,
-    TablePagination,
-    InputAdornment,
-    IconButton,
-    Button
+  Box,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  CircularProgress,
+  Alert,
+  Button,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { Search, Flag } from '@mui/icons-material';
+import { Refresh, MailOutline, AutoAwesome } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getEmails, Email } from '../../api/emails';
-
-import { BulkDraftDialog } from './BulkDraftDialog';
-import { BulkSelectionBar } from './BulkSelectionBar';
-import { BulkPreviewDialog } from './BulkPreviewDialog';
-import { Checkbox } from '@mui/material';
+import { getGmailInbox, GmailMessage } from '../../api/gmail';
+import { AutoReplyDialog } from './AutoReplyDialog';
+import { useNotification } from '../../context/NotificationContext';
 
 export const InboxList = () => {
-    const navigate = useNavigate();
-    const [emails, setEmails] = useState<Email[]>([]);
-    const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [search, setSearch] = useState('');
-    const [filterRead, setFilterRead] = useState<boolean | undefined>(undefined);
+  const navigate = useNavigate();
+  const [emails, setEmails] = useState<GmailMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notConnected, setNotConnected] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined);
 
-    // Selection
-    const [selected, setSelected] = useState<number[]>([]);
-    const [showBulkDialog, setShowBulkDialog] = useState(false);
-    const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  // Auto-reply dialog state
+  const [autoReplyOpen, setAutoReplyOpen] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<GmailMessage | null>(null);
 
-    const fetchEmails = async () => {
-        try {
-            const data = await getEmails({
-                page: page + 1,
-                size: rowsPerPage,
-                q: search,
-                is_read: filterRead
-            });
-            setEmails(data.items);
-            setTotal(data.total);
-            // Clear selection on page change or filter if needed, but keeping for now
-            // simpler to clear
-            setSelected([]);
-        } catch (error) {
-            console.error("Failed to fetch emails", error);
-        }
+  // Polling ref
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { showNotification } = useNotification();
+
+  const fetchEmails = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    setError(null);
+    setNotConnected(false);
+    try {
+      const data = await getGmailInbox(50);
+
+      // Check for new emails if this is a background refresh
+      if (!showLoading && emails.length > 0 && data.messages.length > emails.length) {
+        const diff = data.messages.length - emails.length;
+        showNotification(`You have ${diff} new email(s)!`, 'info');
+      } else if (!showLoading && emails.length > 0 && data.messages[0]?.id !== emails[0]?.id) {
+        // Even if count is same, check if first email changed
+        showNotification(`You have new emails!`, 'info');
+      }
+
+      setEmails(data.messages);
+      setNextPageToken(data.nextPageToken);
+      setLastUpdated(new Date());
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.detail || err.message || 'Failed to fetch emails';
+      if (errorMessage.includes('not connected') || errorMessage.includes('Gmail not connected')) {
+        setNotConnected(true);
+      } else {
+        setError(errorMessage);
+      }
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
+
+  const loadMore = async () => {
+    if (!nextPageToken || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await getGmailInbox(50, nextPageToken);
+      setEmails((prev) => [...prev, ...data.messages]);
+      setNextPageToken(data.nextPageToken);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err.message || 'Failed to load more emails');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Initial fetch and setup polling
+  useEffect(() => {
+    fetchEmails();
+
+    // Start polling every 30 seconds for new emails
+    pollingRef.current = setInterval(() => {
+      fetchEmails(false); // Silent refresh
+    }, 30000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
     };
+  }, [fetchEmails]);
 
-    useEffect(() => {
-        fetchEmails();
-    }, [page, rowsPerPage, search, filterRead]);
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
 
-    const handleChangePage = (event: unknown, newPage: number) => {
-        setPage(newPage);
-    };
+      if (isToday) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } catch {
+      return dateString;
+    }
+  };
 
-    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
-    };
+  const extractSenderName = (sender: string) => {
+    const match = sender.match(/^([^<]+)/);
+    if (match) {
+      return match[1].trim().replace(/"/g, '');
+    }
+    return sender;
+  };
 
-    const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.checked) {
-            const newSelected = emails.map((n) => n.id);
-            setSelected(newSelected);
-            return;
-        }
-        setSelected([]);
-    };
+  const handleAutoReplyClick = (e: React.MouseEvent, email: GmailMessage) => {
+    e.stopPropagation();
+    setSelectedEmail(email);
+    setAutoReplyOpen(true);
+  };
 
-    const handleClick = (event: React.MouseEvent<unknown>, id: number) => {
-        event.stopPropagation();
-        const selectedIndex = selected.indexOf(id);
-        let newSelected: number[] = [];
+  const handleAutoReplyClose = () => {
+    setAutoReplyOpen(false);
+    setSelectedEmail(null);
+  };
 
-        if (selectedIndex === -1) {
-            newSelected = newSelected.concat(selected, id);
-        } else if (selectedIndex === 0) {
-            newSelected = newSelected.concat(selected.slice(1));
-        } else if (selectedIndex === selected.length - 1) {
-            newSelected = newSelected.concat(selected.slice(0, -1));
-        } else if (selectedIndex > 0) {
-            newSelected = newSelected.concat(
-                selected.slice(0, selectedIndex),
-                selected.slice(selectedIndex + 1),
-            );
-        }
-        setSelected(newSelected);
-    };
-
-    const isSelected = (id: number) => selected.indexOf(id) !== -1;
-
+  if (loading) {
     return (
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4">Inbox</Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                    {selected.length > 0 && (
-                        <Button
-                            variant="contained"
-                            color="secondary"
-                            onClick={() => setShowBulkDialog(true)}
-                        >
-                            Bulk Reply ({selected.length})
-                        </Button>
-                    )}
-                    <TextField
-                        size="small"
-                        placeholder="Search emails..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <Search />
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                </Box>
-            </Box>
-
-            <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-                <Chip
-                    label="All"
-                    onClick={() => setFilterRead(undefined)}
-                    color={filterRead === undefined ? 'primary' : 'default'}
-                    variant={filterRead === undefined ? 'filled' : 'outlined'}
-                />
-                <Chip
-                    label="Unread"
-                    onClick={() => setFilterRead(false)}
-                    color={filterRead === false ? 'primary' : 'default'}
-                    variant={filterRead === false ? 'filled' : 'outlined'}
-                />
-                <Chip
-                    label="Read"
-                    onClick={() => setFilterRead(true)}
-                    color={filterRead === true ? 'primary' : 'default'}
-                    variant={filterRead === true ? 'filled' : 'outlined'}
-                />
-            </Box>
-
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell padding="checkbox">
-                                <Checkbox
-                                    color="primary"
-                                    indeterminate={selected.length > 0 && selected.length < emails.length}
-                                    checked={emails.length > 0 && selected.length === emails.length}
-                                    onChange={handleSelectAll}
-                                />
-                            </TableCell>
-                            <TableCell>Sender</TableCell>
-                            <TableCell>Subject</TableCell>
-                            <TableCell>Date</TableCell>
-                            <TableCell>Status</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {emails.map((email) => {
-                            const isItemSelected = isSelected(email.id);
-                            return (
-                                <TableRow
-                                    key={email.id}
-                                    hover
-                                    role="checkbox"
-                                    aria-checked={isItemSelected}
-                                    selected={isItemSelected}
-                                    onClick={() => navigate(`/inbox/${email.id}`)}
-                                    sx={{ cursor: 'pointer', fontWeight: !email.is_read ? 'bold' : 'normal' }}
-                                >
-                                    <TableCell padding="checkbox" onClick={(e) => handleClick(e, email.id)}>
-                                        <Checkbox
-                                            color="primary"
-                                            checked={isItemSelected}
-                                        />
-                                    </TableCell>
-                                    <TableCell>{email.sender}</TableCell>
-                                    <TableCell>
-                                        {email.subject}
-                                        {email.is_flagged && <Flag fontSize="small" color="warning" sx={{ ml: 1, verticalAlign: 'middle' }} />}
-                                    </TableCell>
-                                    <TableCell>{new Date(email.received_at).toLocaleDateString()}</TableCell>
-                                    <TableCell>
-                                        {!email.is_read && <Chip label="New" color="error" size="small" />}
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-                    </TableBody>
-                </Table>
-                <TablePagination
-                    rowsPerPageOptions={[5, 10, 25]}
-                    component="div"
-                    count={total}
-                    rowsPerPage={rowsPerPage}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                />
-            </TableContainer>
-
-            {/* Floating Selection Bar */}
-            <BulkSelectionBar
-                selectedCount={selected.length}
-                onClear={() => setSelected([])}
-                onBulkReply={() => setShowBulkDialog(true)}
-                onPreview={() => setShowPreviewDialog(true)}
-            />
-
-            {/* Bulk Draft Generation Dialog */}
-            <BulkDraftDialog
-                open={showBulkDialog}
-                onClose={() => setShowBulkDialog(false)}
-                selectedCount={selected.length}
-                emailIds={selected}
-                onSuccess={() => {
-                    setSelected([]);
-                    fetchEmails();
-                }}
-            />
-
-            {/* Bulk Preview & Send Dialog */}
-            <BulkPreviewDialog
-                open={showPreviewDialog}
-                onClose={() => setShowPreviewDialog(false)}
-                emailIds={selected}
-                onComplete={() => {
-                    setSelected([]);
-                    fetchEmails();
-                }}
-            />
-        </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Loading your Gmail inbox...</Typography>
+      </Box>
     );
+  }
+
+  if (notConnected) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 8 }}>
+        <MailOutline sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+        <Typography variant="h5" gutterBottom>
+          Gmail Not Connected
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Please sign in with Google and grant Gmail access to view your inbox.
+        </Typography>
+        <Button variant="contained" onClick={() => navigate('/login')}>
+          Connect Gmail
+        </Button>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ py: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+        <Button startIcon={<Refresh />} onClick={() => fetchEmails()}>
+          Try Again
+        </Button>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">Inbox</Typography>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {lastUpdated && (
+            <Typography variant="caption" color="text.secondary">
+              Updated {lastUpdated.toLocaleTimeString()}
+            </Typography>
+          )}
+          <Chip label={`${emails.length} emails`} size="small" variant="outlined" />
+          <Button startIcon={<Refresh />} onClick={() => fetchEmails()} size="small">
+            Refresh
+          </Button>
+        </Box>
+      </Box>
+
+      {emails.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <MailOutline sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+          <Typography color="text.secondary">Your inbox is empty</Typography>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>From</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Subject</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 100 }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 80 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 80, textAlign: 'center' }}>
+                  <Tooltip title="AI Auto-Reply">
+                    <AutoAwesome fontSize="small" color="primary" />
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {emails.map((email) => (
+                <TableRow
+                  key={email.id}
+                  hover
+                  onClick={() => navigate(`/inbox/${email.id}`)}
+                  sx={{
+                    cursor: 'pointer',
+                    backgroundColor: !email.is_read ? 'action.hover' : 'inherit',
+                  }}
+                >
+                  <TableCell sx={{ fontWeight: !email.is_read ? 600 : 400 }}>
+                    {extractSenderName(email.sender)}
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ fontWeight: !email.is_read ? 600 : 400 }}>
+                      {email.subject || '(No Subject)'}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 400,
+                      }}
+                    >
+                      {email.snippet}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(email.date)}</TableCell>
+                  <TableCell>
+                    {!email.is_read && <Chip label="New" color="primary" size="small" />}
+                  </TableCell>
+                  <TableCell sx={{ textAlign: 'center' }}>
+                    <Tooltip title="Generate AI Reply">
+                      <IconButton
+                        size="small"
+                        color="secondary"
+                        onClick={(e) => handleAutoReplyClick(e, email)}
+                        sx={{
+                          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                          color: 'white',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                          },
+                        }}
+                      >
+                        <AutoAwesome fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Load More Button */}
+      {nextPageToken && !loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Button
+            variant="outlined"
+            onClick={loadMore}
+            disabled={loadingMore}
+            startIcon={loadingMore ? <CircularProgress size={16} /> : null}
+          >
+            {loadingMore ? 'Loading...' : 'Load More Emails'}
+          </Button>
+        </Box>
+      )}
+
+      {/* Auto-Reply Dialog */}
+      <AutoReplyDialog
+        open={autoReplyOpen}
+        onClose={handleAutoReplyClose}
+        email={selectedEmail}
+        onSuccess={() => fetchEmails()}
+      />
+    </Box>
+  );
 };

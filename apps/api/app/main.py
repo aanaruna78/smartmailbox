@@ -1,10 +1,25 @@
 from fastapi import FastAPI
 from app.core.logging import setup_logging
-from app.routes import auth, admin, mailboxes, jobs, emails, drafts, audit, approval, groups, spam, quarantine, admin_settings, analytics, health, metrics
+from app.routes import auth, admin, mailboxes, jobs, emails, drafts, audit, approval, groups, spam, quarantine, admin_settings, analytics, health, metrics, gmail
+from app.db.session import engine, Base
+from app import models  # Import models to register with Base
 
 setup_logging()
 
+# Create tables on startup for development
+Base.metadata.create_all(bind=engine)
+
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Smart Mailbox API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth.router, tags=["auth"])
 app.include_router(admin.router, tags=["admin"])
@@ -21,7 +36,9 @@ app.include_router(admin_settings.router, prefix="/admin-settings", tags=["admin
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+app.include_router(gmail.router, tags=["gmail"])
 
 @app.get("/")
 def read_root():
     return {"message": "Hello World"}
+

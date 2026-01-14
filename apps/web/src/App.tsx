@@ -8,10 +8,8 @@ import '@fontsource/inter/700.css';
 import { AuthProvider } from './features/auth/AuthProvider';
 import { LoginPage } from './features/auth/LoginPage';
 import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { config } from './config';
-import './App.css';
-
-
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -27,48 +25,51 @@ import { InboxList } from './features/inbox/InboxList';
 import { EmailDetail } from './features/inbox/EmailDetail';
 
 const AppContent = () => {
-    return (
-        <Layout>
-            <Routes>
-                {/* Public Routes */}
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/unauthorized" element={<Unauthorized />} />
+  return (
+    <Layout>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
 
-                {/* Protected Routes */}
-                <Route element={<ProtectedRoute />}>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/mailboxes" element={<MailboxList />} />
-                    <Route path="/mailboxes/new" element={<MailboxForm />} />
-                    <Route path="/jobs" element={<JobMonitor />} />
-                    <Route path="/inbox" element={<InboxList />} />
-                    <Route path="/inbox/:id" element={<EmailDetail />} />
+        {/* Protected Routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/mailboxes" element={<MailboxList />} />
+          <Route path="/mailboxes/new" element={<MailboxForm />} />
+          <Route path="/jobs" element={<JobMonitor />} />
+          <Route path="/inbox" element={<InboxList />} />
+          <Route path="/inbox/:id" element={<EmailDetail />} />
 
-                    {/* Admin Routes */}
-                    <Route element={<RoleRoute allowedRoles={['admin']} />}>
-                        <Route path="/admin" element={<AdminDashboard />} />
-                    </Route>
-                </Route>
+          {/* Admin Routes */}
+          <Route element={<RoleRoute allowedRoles={['admin']} />}>
+            <Route path="/admin" element={<AdminDashboard />} />
+          </Route>
+        </Route>
 
-                {/* Fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-        </Layout>
-    );
-}
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
+  );
+};
 
 function App() {
-    return (
-        <GoogleOAuthProvider clientId={config.auth.googleClientId}>
-            <ThemeProvider>
-                <AuthProvider>
-                    <BrowserRouter>
-                        <div className="App">
-                            <AppContent />
-                        </div>
-                    </BrowserRouter>
-                </AuthProvider>
-            </ThemeProvider>
-        </GoogleOAuthProvider>
-    );
+  return (
+    <GoogleOAuthProvider clientId={config.auth.googleClientId}>
+      <ThemeProvider>
+        <NotificationProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <div className="App">
+                <AppContent />
+              </div>
+            </BrowserRouter>
+          </AuthProvider>
+        </NotificationProvider>
+      </ThemeProvider>
+    </GoogleOAuthProvider>
+  );
 }
 
+export default App;

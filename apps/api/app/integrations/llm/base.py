@@ -12,3 +12,7 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     async def generate(self, prompt: str, params: Optional[Dict[str, Any]] = None) -> LLMResponse:
         pass
+
+    @abstractmethod
+    async def stream(self, prompt: str, params: Optional[Dict[str, Any]] = None):
+        pass

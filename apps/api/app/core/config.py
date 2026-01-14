@@ -1,5 +1,5 @@
 from typing import List, Optional, Union
-from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, field_validator
+from pydantic import AnyHttpUrl, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     ENV: str = "development"
     
-    # Database
-    DATABASE_URL: Union[PostgresDsn, str]
+    # Database (supports SQLite or PostgreSQL)
+    DATABASE_URL: str
     
     # Redis
     REDIS_URL: RedisDsn
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Google SSO
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
+
+    # LLM
+    GEMINI_API_KEY: Optional[str] = None
 
     # SMTP
     SMTP_HOST: str = "smtp.example.com"

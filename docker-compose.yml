@@ -19,6 +19,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public
 
   api:
     build:
@@ -28,9 +31,24 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/smartmailbox
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=testsecretkey1234567890123456789012
+      - ENCRYPTION_KEY=testencryptionkey12345678901234
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./apps/api/app:/app/app
+      - ./apps/api/tests:/app/tests
     depends_on:
       - db
       - redis
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
   worker:
     build:
@@ -39,6 +57,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/smartmailbox
       - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=testsecretkey1234567890123456789012
+      - ENCRYPTION_KEY=testencryptionkey12345678901234
+    volumes:
+      - ./apps/api/app:/app/app
+      - ./apps/api/tests:/app/tests
     depends_on:
       - db
       - redis
@@ -62,3 +85,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:

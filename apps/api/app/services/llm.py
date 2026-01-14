@@ -8,8 +8,7 @@ logger = logging.getLogger(__name__)
 
 class LLMService:
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
-        # Default to OllamaProvider if none provided
-        # In a real app, this would be configured via settings
+        # Use OllamaProvider with tinyllama for fast local generation (no quota limits)
         self.provider = provider or OllamaProvider()
 
     async def generate_draft(self, prompt: str, timeout: float = 30.0, params: Optional[Dict[str, Any]] = None) -> LLMResponse:
@@ -34,4 +33,16 @@ class LLMService:
             
         except Exception as e:
             logger.error(f"LLM Generation failed: {str(e)}")
+            raise e
+
+    async def stream_draft(self, prompt: str, params: Optional[Dict[str, Any]] = None):
+        """
+        Stream text generation using the configured LLM provider.
+        """
+        try:
+            logger.info(f"Streaming draft with model {getattr(self.provider, 'model', 'unknown')}")
+            async for chunk in self.provider.stream(prompt, params):
+                yield chunk
+        except Exception as e:
+            logger.error(f"LLM Streaming failed: {str(e)}")
             raise e

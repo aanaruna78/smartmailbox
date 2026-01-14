@@ -126,7 +126,89 @@ async def login_google(request: Request, response: Response, login_data: GoogleL
     )
     
     await create_audit_log(db, "LOGIN_SUCCESS", user_id=user.id, request=request)
-    return {"message": "Login successful"}
+    return {
+        "message": "Login successful",
+        "access_token": access_token
+    }
+
+from pydantic import BaseModel as PydanticBaseModel
+
+class GoogleOAuthLogin(PydanticBaseModel):
+    access_token: str
+    scope: str = None
+
+@router.post("/auth/google/oauth")
+async def login_google_oauth(request: Request, response: Response, login_data: GoogleOAuthLogin, db: Session = Depends(get_db)):
+    """Handle OAuth access token from frontend for Gmail API access."""
+    import httpx
+    
+    # 1. Get user info from Google using access token
+    async with httpx.AsyncClient() as client:
+        userinfo_response = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {login_data.access_token}"}
+        )
+        
+        if userinfo_response.status_code != 200:
+            await create_audit_log(db, "LOGIN_FAILED", request=request, details={"reason": "Invalid access token"})
+            raise HTTPException(status_code=401, detail="Invalid Google access token")
+        
+        google_user = userinfo_response.json()
+    
+    # 2. Get or create user
+    email = google_user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email not found")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        user = User(
+            email=email,
+            full_name=google_user.get("name"),
+            is_active=True,
+            role="user"
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        await create_audit_log(db, "USER_CREATED", user_id=user.id, request=request)
+    
+    # 3. Store Google access token for Gmail API
+    user.google_access_token = login_data.access_token
+    db.commit()
+    
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    
+    # 4. Create JWT tokens for session
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = jwt.create_access_token(subject=user.id, expires_delta=access_token_expires)
+    refresh_token_val = jwt.create_refresh_token(subject=user.id)
+    
+    # 5. Set cookies
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        secure=settings.ENV != "development",
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token_val,
+        httponly=True,
+        secure=settings.ENV != "development",
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    await create_audit_log(db, "LOGIN_SUCCESS", user_id=user.id, request=request, details={"gmail_connected": True})
+    return {
+        "message": "Login successful", 
+        "gmail_connected": True,
+        "access_token": access_token
+    }
 
 @router.post("/auth/refresh")
 async def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):

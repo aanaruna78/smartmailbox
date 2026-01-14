@@ -3,19 +3,19 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 
 interface RoleRouteProps {
-    allowedRoles: string[];
+  allowedRoles: string[];
 }
 
 export const RoleRoute = ({ allowedRoles }: RoleRouteProps) => {
-    const { user } = useAuth();
+  const { user } = useAuth();
 
-    if (!user) {
-        return <Navigate to="/login" replace />;
-    }
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-    if (!allowedRoles.includes(user.role)) {
-        return <Navigate to="/unauthorized" replace />;
-    }
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
 
-    return <Outlet />;
+  return <Outlet />;
 };
