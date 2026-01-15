@@ -7,6 +7,7 @@ from app.models.email import Email
 from app.models.draft import Draft
 from app.models.job import Job
 from app.models.audit import AuditLog
+from app.models.mailbox import Mailbox
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class AnalyticsService:
     def get_sla_metrics(
         self, 
         db: Session, 
+        user_id: int,
         mailbox_id: Optional[int] = None,
         days: int = 7
     ) -> Dict:
@@ -31,6 +33,8 @@ class AnalyticsService:
         email_query = db.query(Email).filter(Email.received_at >= since)
         if mailbox_id:
             email_query = email_query.filter(Email.mailbox_id == mailbox_id)
+        else:
+            email_query = email_query.join(Mailbox).filter(Mailbox.user_id == user_id)
         
         # Total emails received
         total_received = email_query.count()
@@ -40,10 +44,12 @@ class AnalyticsService:
         
         # Calculate average response time from audit logs
         response_times = []
-        sent_logs = db.query(AuditLog).filter(
+        sent_logs_query = db.query(AuditLog).filter(
             AuditLog.event_type == "email_sent",
+            AuditLog.user_id == user_id,
             AuditLog.timestamp >= since
-        ).all()
+        )
+        sent_logs = sent_logs_query.all()
         
         for log in sent_logs:
             if log.details and "reply_to_email_id" in log.details:
@@ -61,6 +67,17 @@ class AnalyticsService:
         under_4h = len([t for t in response_times if t < 4])
         under_24h = len([t for t in response_times if t < 24])
         
+        # Overall stats from mailbox
+        overall_total = db.query(func.sum(Mailbox.total_messages)).filter(Mailbox.user_id == user_id)
+        overall_unread = db.query(func.sum(Mailbox.unread_messages)).filter(Mailbox.user_id == user_id)
+        
+        if mailbox_id:
+            overall_total = overall_total.filter(Mailbox.id == mailbox_id)
+            overall_unread = overall_unread.filter(Mailbox.id == mailbox_id)
+            
+        overall_total = overall_total.scalar() or 0
+        overall_unread = overall_unread.scalar() or 0
+
         return {
             "period_days": days,
             "total_received": total_received,
@@ -70,12 +87,15 @@ class AnalyticsService:
             "responses_under_1h": under_1h,
             "responses_under_4h": under_4h,
             "responses_under_24h": under_24h,
-            "total_responses": len(response_times)
+            "total_responses": len(response_times),
+            "overall_total": overall_total,
+            "overall_unread": overall_unread
         }
     
     def get_ai_usage_metrics(
         self, 
         db: Session, 
+        user_id: int,
         mailbox_id: Optional[int] = None,
         days: int = 7
     ) -> Dict:
@@ -88,6 +108,8 @@ class AnalyticsService:
         draft_query = db.query(Draft).filter(Draft.created_at >= since)
         if mailbox_id:
             draft_query = draft_query.join(Email).filter(Email.mailbox_id == mailbox_id)
+        else:
+            draft_query = draft_query.join(Email).join(Mailbox).filter(Mailbox.user_id == user_id)
         
         total_generated = draft_query.count()
         accepted_drafts = draft_query.filter(Draft.is_accepted == True).count()
@@ -95,6 +117,7 @@ class AnalyticsService:
         # Count emails sent from drafts (via audit log)
         sent_query = db.query(AuditLog).filter(
             AuditLog.event_type == "email_sent",
+            AuditLog.user_id == user_id,
             AuditLog.timestamp >= since
         )
         total_sent = sent_query.count()
@@ -134,14 +157,15 @@ class AnalyticsService:
     def get_dashboard_summary(
         self, 
         db: Session, 
+        user_id: int,
         mailbox_id: Optional[int] = None,
         days: int = 7
     ) -> Dict:
         """
         Get combined analytics summary for dashboard.
         """
-        sla = self.get_sla_metrics(db, mailbox_id, days)
-        ai = self.get_ai_usage_metrics(db, mailbox_id, days)
+        sla = self.get_sla_metrics(db, user_id, mailbox_id, days)
+        ai = self.get_ai_usage_metrics(db, user_id, mailbox_id, days)
         
         return {
             "period_days": days,

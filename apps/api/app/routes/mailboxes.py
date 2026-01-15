@@ -107,6 +107,12 @@ async def delete_mailbox(
     if not mailbox:
         raise HTTPException(status_code=404, detail="Mailbox not found")
         
+    if mailbox.provider == "gmail":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Default Gmail mailbox cannot be deleted. It is managed via Google OAuth."
+        )
+        
     db.delete(mailbox)
     db.commit()
     

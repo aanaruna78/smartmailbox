@@ -38,10 +38,13 @@ export const InboxList = () => {
 
   // Polling ref
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
 
   const { showNotification } = useNotification();
 
   const fetchEmails = useCallback(async (showLoading = true) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (showLoading) setLoading(true);
     setError(null);
     setNotConnected(false);
@@ -69,6 +72,7 @@ export const InboxList = () => {
       }
     } finally {
       if (showLoading) setLoading(false);
+      isFetchingRef.current = false;
     }
   }, []);
 

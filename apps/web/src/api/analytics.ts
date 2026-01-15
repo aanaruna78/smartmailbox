@@ -10,6 +10,8 @@ export interface SLAMetrics {
   responses_under_4h: number;
   responses_under_24h: number;
   total_responses: number;
+  overall_total?: number;
+  overall_unread?: number;
 }
 
 export interface AIUsageMetrics {

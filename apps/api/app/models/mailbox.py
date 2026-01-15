@@ -22,6 +22,10 @@ class Mailbox(Base):
     sync_status = Column(String, default="idle") # idle, syncing, failed
     send_rate_limit = Column(Integer, default=10)  # Max emails per minute
     
+    # Overall metrics
+    total_messages = Column(Integer, default=0)
+    unread_messages = Column(Integer, default=0)
+    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

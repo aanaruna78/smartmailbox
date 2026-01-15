@@ -94,15 +94,15 @@ export const Dashboard = () => {
   const stats = [
     {
       title: 'Total Emails',
-      value: data?.sla.total_received ?? 0,
-      subtitle: 'In your inbox',
+      value: data?.sla.overall_total ?? 0,
+      subtitle: `${data?.sla.total_received ?? 0} in last ${data?.period_days} days`,
       icon: <Email />,
       gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
     },
     {
       title: 'Unread',
-      value: data?.sla.backlog ?? 0,
-      subtitle: 'Needs attention',
+      value: data?.sla.overall_unread ?? 0,
+      subtitle: `${data?.sla.backlog ?? 0} in last ${data?.period_days} days`,
       icon: <Inbox />,
       gradient: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)',
     },

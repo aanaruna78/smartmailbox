@@ -31,6 +31,7 @@ class Email(Base):
     
     body_text = Column(Text, nullable=True)
     body_html = Column(Text, nullable=True)
+    snippet = Column(Text, nullable=True)
     
     folder = Column(String, default="INBOX") # INBOX, SENT, TRASH, etc.
     is_read = Column(Boolean, default=False)

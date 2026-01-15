@@ -3,6 +3,7 @@ Gmail API Service for fetching emails using OAuth tokens.
 """
 import json
 from typing import List, Optional, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -113,11 +114,21 @@ class GmailService:
     def get_inbox_messages(self, max_results: int = 20, page_token: str = None) -> Dict[str, Any]:
         """Get messages from inbox with full details and pagination support."""
         result = self.list_messages(max_results=max_results, label_ids=['INBOX'], page_token=page_token)
-        messages = []
-        for ref in result['messages'][:max_results]:
-            msg = self.get_message(ref['id'])
-            if msg:
-                messages.append(msg)
+        message_refs = result.get('messages', [])[:max_results]
+        
+        if not message_refs:
+            return {
+                'messages': [],
+                'nextPageToken': result.get('nextPageToken'),
+            }
+
+        # Fetch message details in parallel
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            messages = list(executor.map(lambda ref: self.get_message(ref['id']), message_refs))
+            
+        # Filter out any None values if get_message failed
+        messages = [m for m in messages if m]
+        
         return {
             'messages': messages,
             'nextPageToken': result.get('nextPageToken'),
@@ -125,16 +136,25 @@ class GmailService:
     
     def get_unread_count(self) -> int:
         """Get count of unread messages."""
+        stats = self.get_mailbox_stats()
+        return stats.get('unread_messages', 0)
+
+    def get_mailbox_stats(self) -> Dict[str, int]:
+        """Get accurate mailbox stats from INBOX label."""
         try:
-            results = self.service.users().messages().list(
+            results = self.service.users().labels().get(
                 userId='me',
-                labelIds=['INBOX', 'UNREAD'],
-                maxResults=1
+                id='INBOX'
             ).execute()
-            return results.get('resultSizeEstimate', 0)
-        except HttpError:
-            return 0
-    
+            
+            return {
+                'total_messages': results.get('messagesTotal', 0),
+                'unread_messages': results.get('messagesUnread', 0)
+            }
+        except HttpError as error:
+            print(f'Gmail API error fetching stats: {error}')
+            return {'total_messages': 0, 'unread_messages': 0}
+
     def send_email(self, to: str, subject: str, body: str) -> bool:
         """Send an email."""
         try:

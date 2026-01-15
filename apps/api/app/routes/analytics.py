@@ -20,6 +20,8 @@ class SLAMetricsResponse(BaseModel):
     responses_under_4h: int
     responses_under_24h: int
     total_responses: int
+    overall_total: int
+    overall_unread: int
 
 
 class JobMetrics(BaseModel):
@@ -61,7 +63,7 @@ def get_sla_metrics(
 ):
     """Get SLA metrics: response times and backlog."""
     service = AnalyticsService()
-    return service.get_sla_metrics(db, mailbox_id, days)
+    return service.get_sla_metrics(db, current_user.id, mailbox_id, days)
 
 
 @router.get("/ai-usage", response_model=AIUsageMetricsResponse)
@@ -73,7 +75,7 @@ def get_ai_usage_metrics(
 ):
     """Get AI usage metrics: generated vs sent, edit rate."""
     service = AnalyticsService()
-    return service.get_ai_usage_metrics(db, mailbox_id, days)
+    return service.get_ai_usage_metrics(db, current_user.id, mailbox_id, days)
 
 
 @router.get("/dashboard", response_model=DashboardSummaryResponse)
@@ -85,4 +87,4 @@ def get_dashboard_summary(
 ):
     """Get combined analytics dashboard summary."""
     service = AnalyticsService()
-    return service.get_dashboard_summary(db, mailbox_id, days)
+    return service.get_dashboard_summary(db, current_user.id, mailbox_id, days)

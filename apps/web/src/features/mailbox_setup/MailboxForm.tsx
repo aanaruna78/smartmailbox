@@ -67,10 +67,15 @@ export const MailboxForm = () => {
     setTestResults(null);
     setError(null);
     try {
-      const results = await testConnection(formData);
+      const testData = {
+        ...formData,
+        imap_port: parseInt(formData.imap_port as any, 10),
+        smtp_port: parseInt(formData.smtp_port as any, 10),
+      };
+      const results = await testConnection(testData);
       setTestResults(results);
-    } catch (err) {
-      setError('Failed to test connection. Please check your network or try again.');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to test connection. Please check your network or try again.');
       console.error(err);
     } finally {
       setTestLoading(false);
@@ -82,10 +87,17 @@ export const MailboxForm = () => {
     setLoading(true);
     setError(null);
     try {
-      await createMailbox(formData);
+      // Ensure ports are numbers
+      const submissionData = {
+        ...formData,
+        imap_port: parseInt(formData.imap_port as any, 10),
+        smtp_port: parseInt(formData.smtp_port as any, 10),
+      };
+      await createMailbox(submissionData);
       navigate('/mailboxes');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create mailbox');
+      console.error('Submit error:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to create mailbox');
     } finally {
       setLoading(false);
     }

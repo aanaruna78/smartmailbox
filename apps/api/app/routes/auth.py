@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.core.security import jwt, oauth_google
 from app.core.config import settings
 from app.models.user import User
+from app.models.mailbox import Mailbox
 from app.schemas.user import Token, GoogleLogin, User as UserSchema
 from app.core.security.deps import get_current_active_user
 
@@ -175,6 +176,22 @@ async def login_google_oauth(request: Request, response: Response, login_data: G
     
     # 3. Store Google access token for Gmail API
     user.google_access_token = login_data.access_token
+    
+    # 3b. Auto-create default mailbox if it doesn't exist
+    mailbox = db.query(Mailbox).filter(
+        Mailbox.user_id == user.id,
+        Mailbox.email_address == user.email
+    ).first()
+    
+    if not mailbox:
+        mailbox = Mailbox(
+            user_id=user.id,
+            email_address=user.email,
+            provider="gmail",
+            is_active=True
+        )
+        db.add(mailbox)
+        
     db.commit()
     
     if not user.is_active:

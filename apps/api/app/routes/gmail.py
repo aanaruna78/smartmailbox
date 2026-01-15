@@ -33,35 +33,45 @@ class SendReplyRequest(BaseModel):
 @router.get("/gmail/inbox")
 async def get_gmail_inbox(
     max_results: int = 50,
-    page_token: Optional[str] = None,
+    offset: int = 0,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get emails from authenticated user's Gmail inbox with pagination."""
-    if not current_user.google_access_token:
-        raise HTTPException(
-            status_code=400, 
-            detail="Gmail not connected. Please sign in with Google and grant Gmail access."
-        )
+    """Get emails from local database for authenticated user with pagination."""
+    from app.models.email import Email
+    from app.models.mailbox import Mailbox
     
     try:
-        gmail = GmailService(
-            access_token=current_user.google_access_token,
-            refresh_token=current_user.google_refresh_token
-        )
+        # Query emails joined with mailboxes to filter by user_id
+        emails_query = db.query(Email).join(Mailbox).filter(
+            Mailbox.user_id == current_user.id
+        ).order_by(Email.received_at.desc())
         
-        # Update token if refreshed
-        new_token = gmail.get_new_access_token()
-        if new_token and new_token != current_user.google_access_token:
-            current_user.google_access_token = new_token
-            db.commit()
+        total_count = emails_query.count()
+        emails = emails_query.offset(offset).limit(max_results).all()
         
-        result = gmail.get_inbox_messages(max_results=max_results, page_token=page_token)
+        # Convert to a format compatible with the frontend expectations
+        messages = []
+        for email in emails:
+            messages.append({
+                "id": email.message_id,
+                "thread_id": email.thread_id,
+                "sender": email.sender,
+                "subject": email.subject,
+                "snippet": email.snippet,
+                "body": email.body_text,
+                "date": email.received_at.isoformat() if email.received_at else None,
+                "is_read": email.is_read
+            })
+            
         return {
-            "messages": result['messages'],
-            "count": len(result['messages']),
-            "nextPageToken": result.get('nextPageToken'),
+            "messages": messages,
+            "count": len(messages),
+            "total_count": total_count,
+            "next_offset": offset + max_results if offset + max_results < total_count else None
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch emails from DB: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch Gmail: {str(e)}")
 

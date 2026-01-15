@@ -14,6 +14,7 @@ import {
   IconButton,
   Alert,
   CircularProgress,
+  Tooltip,
 } from '@mui/material';
 import { Add, Delete, Edit, Refresh } from '@mui/icons-material';
 import { getMailboxes, Mailbox, deleteMailbox } from '../../api/mailboxes';
@@ -112,6 +113,14 @@ export const MailboxList = () => {
                   <TableCell>{mailbox.email_address}</TableCell>
                   <TableCell>
                     <Chip label={mailbox.provider} size="small" variant="outlined" />
+                    {mailbox.provider === 'gmail' && (
+                      <Chip
+                        label="Primary"
+                        size="small"
+                        color="primary"
+                        sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -135,9 +144,18 @@ export const MailboxList = () => {
                     >
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={() => handleDelete(mailbox.id)} size="small" color="error">
-                      <Delete />
-                    </IconButton>
+                    <Tooltip title={mailbox.provider === 'gmail' ? "Primary mailbox cannot be deleted" : "Delete Mailbox"}>
+                      <span>
+                        <IconButton
+                          onClick={() => handleDelete(mailbox.id)}
+                          size="small"
+                          color="error"
+                          disabled={mailbox.provider === 'gmail'}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}

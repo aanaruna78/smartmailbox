@@ -29,6 +29,8 @@ class MailboxResponse(MailboxBase):
     smtp_port: Optional[int] = None
     last_synced_at: Optional[datetime] = None
     sync_status: Optional[str] = "idle"
+    total_messages: int = 0
+    unread_messages: int = 0
     created_at: datetime
     updated_at: datetime
 
